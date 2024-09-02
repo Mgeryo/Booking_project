@@ -1,0 +1,57 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    container_name: book_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: booking_app
+    ports:
+      - 5432:5432
+
+  redis:
+    image: redis:7
+    container_name: booking_redis
+
+  booking:
+    image: image
+    build:
+      context: .
+    container_name: book_app
+    env_file:
+      - .env-non-dev
+    depends_on:
+      - db
+      - redis
+    command: sh -c "alembic upgrade head && gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind=0.0.0.0:8000"
+    ports:
+      - 7777:8000
+
+  celery:
+    image: booking_celery
+    build:
+      context: . # celery это библиотека, у неё нет образа, берём из основного билда
+    container_name: booking_celery
+    command: ["/booking/docker/celery.sh", "celery"]
+    env_file:
+      - .env-non-dev
+    depends_on:
+      - redis
+
+  flower:
+    image: booking_flower
+    build:
+      context: . # flower это библиотека, у неё нет образа, берём из основного билда
+    container_name: booking_flower
+    command: sh -c "celery --app=app.tasks.celery:celery flower"
+    env_file:
+      - .env-non-dev
+    depends_on:
+      - redis
+    ports:
+      - 5555:5555
+
+volumes:
+  postgresdata:
